@@ -87,7 +87,7 @@ class MealPlan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     date = db.Column(db.Date, nullable=False)
-    meal_type = db.Column(db.String(20), nullable=False)
+    meal_type = db.Column(db.String(50), nullable=False)
     food_id = db.Column(db.Integer, db.ForeignKey('food.id'), nullable=False)
     quantity = db.Column(db.Float, nullable=False)
 
@@ -424,23 +424,27 @@ def change_password():
     else:
         return jsonify({"message": "Invalid old password"}), 400
 
-@app.route('/api/meal_plan', methods=['POST'])
+@app.route('/api/add_meal_plan', methods=['POST'])
 @jwt_required()
 def add_meal_plan():
     current_user = get_jwt_identity()
     data = request.json
-    new_meal_plan = MealPlan(
-        user_id=current_user,
-        date=datetime.strptime(data['date'], '%Y-%m-%d').date(),
-        meal_type=data['meal_type'],
-        food_id=data['food_id'],
-        quantity=data['quantity']
-    )
-    db.session.add(new_meal_plan)
-    db.session.commit()
-    return jsonify({"message": "Meal plan added successfully"}), 201
+    try:
+        new_meal_plan = MealPlan(
+            user_id=current_user,
+            date=datetime.strptime(data['date'], '%Y-%m-%d').date(),
+            meal_type=data['meal_type'],
+            food_id=data['food_id'],
+            quantity=data['quantity']
+        )
+        db.session.add(new_meal_plan)
+        db.session.commit()
+        return jsonify({"message": "Meal plan added successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
 
-@app.route('/api/meal_plan/<string:date>', methods=['GET'])
+@app.route('/api/get_meal_plan/<string:date>', methods=['GET'])
 @jwt_required()
 def get_meal_plan(date):
     current_user = get_jwt_identity()
@@ -455,28 +459,32 @@ def get_meal_plan(date):
         'quantity': plan.quantity
     } for plan in meal_plans]), 200
 
-@app.route('/api/workout_routine', methods=['POST'])
+@app.route('/api/create_workout_routine', methods=['POST'])
 @jwt_required()
 def create_workout_routine():
     current_user = get_jwt_identity()
     data = request.json
-    new_routine = WorkoutRoutine(user_id=current_user, name=data['name'])
-    db.session.add(new_routine)
-    db.session.flush()
-    
-    for exercise in data['exercises']:
-        new_exercise = WorkoutExercise(
-            routine_id=new_routine.id,
-            exercise_id=exercise['exercise_id'],
-            sets=exercise['sets'],
-            reps=exercise['reps']
-        )
-        db.session.add(new_exercise)
-    
-    db.session.commit()
-    return jsonify({"message": "Workout routine created successfully"}), 201
+    try:
+        new_routine = WorkoutRoutine(user_id=current_user, name=data['name'])
+        db.session.add(new_routine)
+        db.session.flush()
+        
+        for exercise in data['exercises']:
+            new_exercise = WorkoutExercise(
+                routine_id=new_routine.id,
+                exercise_id=exercise['exercise_id'],
+                sets=exercise['sets'],
+                reps=exercise['reps']
+            )
+            db.session.add(new_exercise)
+        
+        db.session.commit()
+        return jsonify({"message": "Workout routine created successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
 
-@app.route('/api/workout_routines', methods=['GET'])
+@app.route('/api/get_workout_routines', methods=['GET'])
 @jwt_required()
 def get_workout_routines():
     current_user = get_jwt_identity()
@@ -491,23 +499,27 @@ def get_workout_routines():
         } for exercise in routine.exercises]
     } for routine in routines]), 200
 
-@app.route('/api/progress', methods=['POST'])
+@app.route('/api/add_progress', methods=['POST'])
 @jwt_required()
 def add_progress():
     current_user = get_jwt_identity()
     data = request.json
-    new_progress = ProgressTracker(
-        user_id=current_user,
-        date=datetime.strptime(data['date'], '%Y-%m-%d').date(),
-        weight=data.get('weight'),
-        body_fat=data.get('body_fat'),
-        muscle_mass=data.get('muscle_mass')
-    )
-    db.session.add(new_progress)
-    db.session.commit()
-    return jsonify({"message": "Progress added successfully"}), 201
+    try:
+        new_progress = ProgressTracker(
+            user_id=current_user,
+            date=datetime.strptime(data['date'], '%Y-%m-%d').date(),
+            weight=data.get('weight'),
+            body_fat=data.get('body_fat'),
+            muscle_mass=data.get('muscle_mass')
+        )
+        db.session.add(new_progress)
+        db.session.commit()
+        return jsonify({"message": "Progress added successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
 
-@app.route('/api/progress', methods=['GET'])
+@app.route('/api/get_progress', methods=['GET'])
 @jwt_required()
 def get_progress():
     current_user = get_jwt_identity()
@@ -518,6 +530,17 @@ def get_progress():
         'body_fat': progress.body_fat,
         'muscle_mass': progress.muscle_mass
     } for progress in progress]), 200
+
+@app.route('/api/get_exercises', methods=['GET'])
+@jwt_required()
+def get_exercises():
+    exercises = Exercise.query.all()
+    return jsonify([{
+        'id': exercise.id,
+        'name': exercise.name,
+        'calories_burned': exercise.calories_burned,
+        'duration': exercise.duration
+    } for exercise in exercises]), 200
 
 @app.errorhandler(Exception)
 def handle_exception(e):
