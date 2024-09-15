@@ -83,6 +83,35 @@ class Goal(db.Model):
     start_date = db.Column(db.DateTime, default=datetime.utcnow)
     end_date = db.Column(db.DateTime)
 
+class MealPlan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    meal_type = db.Column(db.String(20), nullable=False)
+    food_id = db.Column(db.Integer, db.ForeignKey('food.id'), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+
+class WorkoutRoutine(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    exercises = db.relationship('WorkoutExercise', backref='routine', lazy=True)
+
+class WorkoutExercise(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    routine_id = db.Column(db.Integer, db.ForeignKey('workout_routine.id'), nullable=False)
+    exercise_id = db.Column(db.Integer, db.ForeignKey('exercise.id'), nullable=False)
+    sets = db.Column(db.Integer, nullable=False)
+    reps = db.Column(db.Integer, nullable=False)
+
+class ProgressTracker(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    weight = db.Column(db.Float)
+    body_fat = db.Column(db.Float)
+    muscle_mass = db.Column(db.Float)
+
 # Create the database tables
 with app.app_context():
     db.create_all()
@@ -394,6 +423,101 @@ def change_password():
         return jsonify({"message": "Password changed successfully"}), 200
     else:
         return jsonify({"message": "Invalid old password"}), 400
+
+@app.route('/api/meal_plan', methods=['POST'])
+@jwt_required()
+def add_meal_plan():
+    current_user = get_jwt_identity()
+    data = request.json
+    new_meal_plan = MealPlan(
+        user_id=current_user,
+        date=datetime.strptime(data['date'], '%Y-%m-%d').date(),
+        meal_type=data['meal_type'],
+        food_id=data['food_id'],
+        quantity=data['quantity']
+    )
+    db.session.add(new_meal_plan)
+    db.session.commit()
+    return jsonify({"message": "Meal plan added successfully"}), 201
+
+@app.route('/api/meal_plan/<string:date>', methods=['GET'])
+@jwt_required()
+def get_meal_plan(date):
+    current_user = get_jwt_identity()
+    meal_plans = MealPlan.query.filter_by(
+        user_id=current_user,
+        date=datetime.strptime(date, '%Y-%m-%d').date()
+    ).all()
+    return jsonify([{
+        'id': plan.id,
+        'meal_type': plan.meal_type,
+        'food_name': Food.query.get(plan.food_id).name,
+        'quantity': plan.quantity
+    } for plan in meal_plans]), 200
+
+@app.route('/api/workout_routine', methods=['POST'])
+@jwt_required()
+def create_workout_routine():
+    current_user = get_jwt_identity()
+    data = request.json
+    new_routine = WorkoutRoutine(user_id=current_user, name=data['name'])
+    db.session.add(new_routine)
+    db.session.flush()
+    
+    for exercise in data['exercises']:
+        new_exercise = WorkoutExercise(
+            routine_id=new_routine.id,
+            exercise_id=exercise['exercise_id'],
+            sets=exercise['sets'],
+            reps=exercise['reps']
+        )
+        db.session.add(new_exercise)
+    
+    db.session.commit()
+    return jsonify({"message": "Workout routine created successfully"}), 201
+
+@app.route('/api/workout_routines', methods=['GET'])
+@jwt_required()
+def get_workout_routines():
+    current_user = get_jwt_identity()
+    routines = WorkoutRoutine.query.filter_by(user_id=current_user).all()
+    return jsonify([{
+        'id': routine.id,
+        'name': routine.name,
+        'exercises': [{
+            'name': Exercise.query.get(exercise.exercise_id).name,
+            'sets': exercise.sets,
+            'reps': exercise.reps
+        } for exercise in routine.exercises]
+    } for routine in routines]), 200
+
+@app.route('/api/progress', methods=['POST'])
+@jwt_required()
+def add_progress():
+    current_user = get_jwt_identity()
+    data = request.json
+    new_progress = ProgressTracker(
+        user_id=current_user,
+        date=datetime.strptime(data['date'], '%Y-%m-%d').date(),
+        weight=data.get('weight'),
+        body_fat=data.get('body_fat'),
+        muscle_mass=data.get('muscle_mass')
+    )
+    db.session.add(new_progress)
+    db.session.commit()
+    return jsonify({"message": "Progress added successfully"}), 201
+
+@app.route('/api/progress', methods=['GET'])
+@jwt_required()
+def get_progress():
+    current_user = get_jwt_identity()
+    progress = ProgressTracker.query.filter_by(user_id=current_user).order_by(ProgressTracker.date).all()
+    return jsonify([{
+        'date': progress.date.strftime('%Y-%m-%d'),
+        'weight': progress.weight,
+        'body_fat': progress.body_fat,
+        'muscle_mass': progress.muscle_mass
+    } for progress in progress]), 200
 
 @app.errorhandler(Exception)
 def handle_exception(e):

@@ -1,7 +1,9 @@
 Flask
-Flask-SQLAlchemy
 Flask-CORS
+Flask-SQLAlchemy
 Flask-JWT-Extended
 psycopg2-binary
 bcrypt
+PyJWT
 python-dotenv
+gunicorn
